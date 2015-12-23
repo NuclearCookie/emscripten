@@ -100,12 +100,12 @@ namespace emscripten {
 
             void _embind_register_value_object(
                 TYPEID structType,
-                const char* fieldName,
+                const char* name,
                 const char* constructorSignature,
                 GenericFunction constructor,
                 const char* destructorSignature,
                 GenericFunction destructor);
-            
+
             void _embind_register_value_object_field(
                 TYPEID structType,
                 const char* fieldName,
@@ -119,6 +119,26 @@ namespace emscripten {
                 void* setterContext);
 
             void _embind_finalize_value_object(TYPEID structType);
+
+            void _embind_register_trivial_class(
+                TYPEID classType,
+                const char* name,
+                const char* constructorSignature,
+                GenericFunction constructor,
+                const char* destructorSignature,
+                GenericFunction destructor);
+
+            void _embind_register_trivial_class_property(
+                TYPEID classType,
+                const char* propertyName,
+                TYPEID getterReturnType,
+                const char* getterSignature,
+                GenericFunction getter,
+                void* getterContext,
+                TYPEID setterArgumentType,
+                const char* setterSignature,
+                GenericFunction setter,
+                void* setterContext);
 
             void _embind_register_class(
                 TYPEID classType,
@@ -1418,6 +1438,76 @@ namespace emscripten {
                 reinterpret_cast<GenericFunction>(getter),
                 getSignature(setter),
                 reinterpret_cast<GenericFunction>(setter));
+            return *this;
+        }
+    };
+
+    template<typename ClassType <
+    class trivial_class_ {
+    public:
+        typedef ClassType class_type;
+
+        class_() = delete;
+
+        EMSCRIPTEN_ALWAYS_INLINE explicit trivial_class_(const char* name) {
+            using namespace internal;
+
+            auto ctor = &raw_constructor<ClassType>;
+            auto dtor = &raw_destructor<ClassType>;
+
+            _embind_register_trivial_class(
+                TypeID<ClassType>::get(),
+                name,
+                getSignature(ctor),
+                reinterpret_cast<GenericFunction>(ctor),
+                getSignature(dtor),
+                reinterpret_cast<GenericFunction>(dtor);
+        }
+
+        template<typename... ConstructorArgs, typename... Policies>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& constructor(Policies... policies) const {
+            return constructor(
+                &internal::operator_new<ClassType, ConstructorArgs...>,
+                policies...);
+        }
+
+        template<typename... Args, typename ReturnType, typename... Policies>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& constructor(ReturnType (*factory)(Args...), Policies...) const {
+            using namespace internal;
+
+            // TODO: allows all raw pointers... policies need a rethink
+            typename WithPolicies<allow_raw_pointers, Policies...>::template ArgTypeList<ReturnType, Args...> args;
+            auto invoke = &Invoker<ReturnType, Args...>::invoke;
+            _embind_register_trivial_class_constructor(
+                TypeID<ClassType>::get(),
+                args.getCount(),
+                args.getTypes(),
+                getSignature(invoke),
+                reinterpret_cast<GenericFunction>(invoke),
+                reinterpret_cast<GenericFunction>(factory));
+            return *this;
+        }
+
+        template<typename InstanceType, typename FieldType>
+        value_object& property(const char* fieldName, FieldType InstanceType::*field) {
+            using namespace internal;
+
+            auto getter = &MemberAccess<InstanceType, FieldType>
+                ::template getWire<ClassType>;
+            auto setter = &MemberAccess<InstanceType, FieldType>
+                ::template setWire<ClassType>;
+
+            _embind_register_trivial_class_property(
+                TypeID<ClassType>::get(),
+                fieldName,
+                TypeID<FieldType>::get(),
+                getSignature(getter),
+                reinterpret_cast<GenericFunction>(getter),
+                getContext(field),
+                TypeID<FieldType>::get(),
+                getSignature(setter),
+                reinterpret_cast<GenericFunction>(setter),
+                getContext(field));
             return *this;
         }
     };

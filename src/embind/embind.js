@@ -1684,6 +1684,51 @@ var LibraryEmbind = {
     };
   },
 
+  $trivialClassRegistrations: {},
+
+  _embind_register_trivial_class__deps: [
+    '$trivialClassRegistrations', '$readLatin1String', '$requireFunction'],
+  _embind_register_trivial_class: function(
+    rawType,
+    name,
+    constructorSignature,
+    rawConstructor,
+    destructorSignature,
+    rawDestructor
+  ) {
+    trivialClassRegistrations[rawType] = {
+        name: readLatin1String(name),
+        rawConstructor: requireFunction(constructorSignature, rawConstructor),
+        rawDestructor: requireFunction(destructorSignature, rawDestructor),
+        properties: [];
+    };
+  },
+
+  _embind_register_trivial_class_property__deps: [
+    '$trivialClassRegistrations', '$readLatin1String', '$requireFunction'],
+  _embind_register_trivial_class_property: function(
+    classType,
+    propertyName,
+    getterReturnType,
+    getterSignature,
+    getter,
+    getterContext,
+    setterArgumentType,
+    setterSignature,
+    setter,
+    setterContext
+  ) {
+    trivialClassRegistrations[classType].properties.push({
+        propertyName: readLatin1String(propertyName),
+        getterReturnType: getterReturnType,
+        getter: requireFunction(getterSignature, getter),
+        getterContext: getterContext,
+        setterArgumentType: setterArgumentType,
+        setter: requireFunction(setterSignature, setter),
+        setterContext: setterContext,
+    });
+  },
+
   _embind_register_class__deps: [
     '$BindingError', '$ClassHandle', '$createNamedFunction',
     '$registeredPointers', '$exposePublicSymbol',
