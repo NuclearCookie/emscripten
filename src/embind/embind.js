@@ -1687,21 +1687,66 @@ var LibraryEmbind = {
   $trivialClassRegistrations: {},
 
   _embind_register_trivial_class__deps: [
-    '$trivialClassRegistrations', '$readLatin1String', '$requireFunction'],
+    '$trivialClassRegistrations', '$readLatin1String'],
   _embind_register_trivial_class: function(
     rawType,
-    name,
-    constructorSignature,
-    rawConstructor,
-    destructorSignature,
-    rawDestructor
+    name
   ) {
     trivialClassRegistrations[rawType] = {
         name: readLatin1String(name),
-        rawConstructor: requireFunction(constructorSignature, rawConstructor),
-        rawDestructor: requireFunction(destructorSignature, rawDestructor),
         properties: [];
     };
+  },
+
+  _embind_register_trivial_class_constructor__deps: [
+    '$heap32VectorToArray', '$requireFunction', '$runDestructors',
+    '$throwBindingError', '$whenDependentTypesAreResolved'],
+  _embind_register_trivial_class_constructor: function(
+    rawClassType,
+    argCount,
+    rawArgTypesAddr,
+    invokerSignature,
+    invoker,
+    rawConstructor
+  ) {
+    var rawArgTypes = heap32VectorToArray(argCount, rawArgTypesAddr);
+    invoker = requireFunction(invokerSignature, invoker);
+
+    whenDependentTypesAreResolved([], [rawClassType], function(classType) {
+        classType = classType[0];
+        var humanName = 'constructor ' + classType.name;
+
+        if (undefined === classType.registeredClass.constructor_body) {
+            classType.registeredClass.constructor_body = [];
+        }
+        if (undefined !== classType.registeredClass.constructor_body[argCount - 1]) {
+            throw new BindingError("Cannot register multiple constructors with identical number of parameters (" + (argCount-1) + ") for class '" + classType.name + "'! Overload resolution is currently only performed using the parameter count, not actual type info!");
+        }
+        classType.registeredClass.constructor_body[argCount - 1] = function unboundTypeHandler() {
+            throwUnboundTypeError('Cannot construct ' + classType.name + ' due to unbound types', rawArgTypes);
+        };
+
+        whenDependentTypesAreResolved([], rawArgTypes, function(argTypes) {
+            classType.registeredClass.constructor_body[argCount - 1] = function constructor_body() {
+                if (arguments.length !== argCount - 1) {
+                    throwBindingError(humanName + ' called with ' + arguments.length + ' arguments, expected ' + (argCount-1));
+                }
+                var destructors = [];
+                var args = new Array(argCount);
+                args[0] = rawConstructor;
+                for (var i = 1; i < argCount; ++i) {
+                    args[i] = argTypes[i]['toWireType'](destructors, arguments[i - 1]);
+                }
+
+                var ptr = invoker.apply(null, args);
+                runDestructors(destructors);
+
+                return argTypes[0]['fromWireType'](ptr);
+            };
+            return [];
+        });
+        return [];
+    });
   },
 
   _embind_register_trivial_class_property__deps: [

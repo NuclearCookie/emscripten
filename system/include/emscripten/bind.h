@@ -122,11 +122,15 @@ namespace emscripten {
 
             void _embind_register_trivial_class(
                 TYPEID classType,
-                const char* name,
-                const char* constructorSignature,
-                GenericFunction constructor,
-                const char* destructorSignature,
-                GenericFunction destructor);
+                const char* name);
+
+            void _embind_register_trivial_class_constructor(
+                TYPEID classType,
+                unsigned argCount,
+                const TYPEID argTypes[],
+                const char* invokerSignature,
+                GenericFunction invoker,
+                GenericFunction constructor);
 
             void _embind_register_trivial_class_property(
                 TYPEID classType,
@@ -1447,21 +1451,16 @@ namespace emscripten {
     public:
         typedef ClassType class_type;
 
-        class_() = delete;
+        trivial_class_() = delete;
 
         EMSCRIPTEN_ALWAYS_INLINE explicit trivial_class_(const char* name) {
             using namespace internal;
 
-            auto ctor = &raw_constructor<ClassType>;
-            auto dtor = &raw_destructor<ClassType>;
+            static_assert(std::is_trivial<ClassType>::value, "The class you try to bind as a trivial class is not a trivial class!");
 
             _embind_register_trivial_class(
                 TypeID<ClassType>::get(),
-                name,
-                getSignature(ctor),
-                reinterpret_cast<GenericFunction>(ctor),
-                getSignature(dtor),
-                reinterpret_cast<GenericFunction>(dtor);
+                name);
         }
 
         template<typename... ConstructorArgs, typename... Policies>
