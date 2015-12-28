@@ -805,6 +805,42 @@ struct Vector {
     }
 };
 
+struct TrivialVector {
+    Vector() = default;
+
+    Vector(float x_, float y_, float z_, float w_)
+        : x(x_)
+        , y(y_)
+        , z(z_)
+        , w(w_)
+    {}
+
+    float x, y, z, w;
+
+    float& operator[](int i) {
+        return (&x)[i];
+    }
+
+    const float& operator[](int i) const {
+        return (&x)[i];
+    }
+
+    float getY() const {
+        return y;
+    }
+    void setY(float _y) {
+        y = _y;
+    }
+}
+
+float readTrivialVectorZ(const Vector& v) {
+    return v.z;
+}
+
+void writeTrivialVectorZ(Vector& v, float z) {
+    v.z = z;
+}
+
 struct DummyDataToTestPointerAdjustment {
     std::string dummy;
 };
@@ -850,6 +886,14 @@ StructVector emval_test_return_StructVector() {
 }
 
 StructVector emval_test_take_and_return_StructVector(StructVector v) {
+    return v;
+}
+
+TrivialVector emval_test_return_TrivialVector() {
+    return TrivialVector(1, 2, 3, 4);
+}
+
+TrivialVector emval_test_take_and_return_TrivialVector(TrivialVector v) {
     return v;
 }
 
@@ -1709,6 +1753,19 @@ EMSCRIPTEN_BINDINGS(tests) {
 
     function("emval_test_take_and_return_TupleInStruct", &emval_test_take_and_return_TupleInStruct);
 
+    trivial_class_<TrivialVector>("TrivialVector")
+        .constructor()
+        .property("x", &Vector::x)
+        .property("y", &Vector::getY, &Vector::setY)
+        .property("y_readonly", &Vector::getY)
+        .property("z", &readTrivialVectorZ, &writeTrivialVectorZ)
+        .property("w", index<3>())
+        .function("getY", &Vector::getY)
+        .function("setY", &Vector::setY);
+
+    function("emval_test_return_TrivialVector", &emval_test_return_TrivialVector);
+    function("emval_test_take_and_return_TrivialVector", &emval_test_take_and_return_TrivialVector);
+
     class_<ValHolder>("ValHolder")
         .smart_ptr<std::shared_ptr<ValHolder>>("std::shared_ptr<ValHolder>")
         .constructor<val>()
@@ -2455,6 +2512,8 @@ EMSCRIPTEN_BINDINGS(noncopyable) {
 }
 
 struct HasReadOnlyProperty {
+    HasReadOnlyProperty() = default;
+
     HasReadOnlyProperty(int i)
         : i(i)
     {}
@@ -2464,6 +2523,11 @@ struct HasReadOnlyProperty {
 
 EMSCRIPTEN_BINDINGS(read_only_properties) {
     class_<HasReadOnlyProperty>("HasReadOnlyProperty")
+        .constructor<int>()
+        .property("i", &HasReadOnlyProperty::i)
+        ;
+
+    trivial_class<HasReadOnlyProperty>("TrivialHasReadOnlyProperty")
         .constructor<int>()
         .property("i", &HasReadOnlyProperty::i)
         ;

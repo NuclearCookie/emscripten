@@ -1020,6 +1020,66 @@ module({
         });
     });
 
+    BaseFixture.extend("trivial classes", function() {
+        test("trivial class instance", function() {
+            // :TODO: Test if trivial class was created successfully, and check if it gets deleted when out of scope
+            var c = new cm.TrivialVector(0,1,2,0);
+        });
+
+        test("trivial class properties", function() {
+            var c = new cm.TrivialVector(10,1,2,0);
+            assert.equal(10, c.x);
+            c.x = -2;
+            assert.equal(-2, c.x);
+        });
+
+        test("trivial class properties can be methods", function() {
+            var c = new cm.TrivialVector(2, 4, 8, 16);
+            assert.equal(4, c.y);
+            c.y = 6;
+            assert.equal(6, c.y);
+        });
+
+        test("trivial class properties can be functions", function() {
+            var c = new cm.TrivialVector(2, 4, 8, 16);
+            assert.equal(8, c.z);
+            c.z = 6;
+            assert.equal(6, c.z);
+        });
+
+        test("trivial class properties can be set by index", function() {
+            var c = new cm.TrivialVector(2, 4, 8, 16);
+            assert.equal(16, c.w);
+            c.z = 12;
+            assert.equal(12, c.w);
+        });
+
+        test("trivial class properties can be read-only", function() {
+            var c = new cm.TrivialVector(2, 4, 8, 16);
+            assert.equal(4, c.y_readonly);
+            var e = assert.throws(cm.BindingError, function() {
+                c.y_readonly = 10;
+            });
+            assert.equal('TrivialVector.y_readonly is a read-only property', e.message);
+        });
+
+        test("trivial read-only member field", function() {
+            var a = new cm.TrivialHasReadOnlyProperty(10);
+            assert.equal(10, a.i);
+            var e = assert.throws(cm.BindingError, function() {
+                a.i = 20;
+            });
+            assert.equal('HasReadOnlyProperty.i is a read-only property', e.message);
+        });
+
+        test("trivial class methods", function() {
+            var c = new cm.TrivialVector( 0, 1, 2, 3 );
+            assert.equal(1, c.getY());
+            c.setY( 10 );
+            assert.equal(10, c.getY());
+        });
+    });
+
     BaseFixture.extend("classes", function() {
         test("class instance", function() {
             var a = {foo: 'bar'};
