@@ -806,9 +806,9 @@ struct Vector {
 };
 
 struct TrivialVector {
-    Vector() = default;
+    TrivialVector() = default;
 
-    Vector(float x_, float y_, float z_, float w_)
+    TrivialVector(float x_, float y_, float z_, float w_)
         : x(x_)
         , y(y_)
         , z(z_)
@@ -831,13 +831,21 @@ struct TrivialVector {
     void setY(float _y) {
         y = _y;
     }
-}
 
-float readTrivialVectorZ(const Vector& v) {
+    float getW() const {
+        return w;
+    }
+
+    void setW( float _w) {
+        w = _w;
+    }
+};
+
+float readTrivialVectorZ(const TrivialVector& v) {
     return v.z;
 }
 
-void writeTrivialVectorZ(Vector& v, float z) {
+void writeTrivialVectorZ(TrivialVector& v, float z) {
     v.z = z;
 }
 
@@ -1755,13 +1763,12 @@ EMSCRIPTEN_BINDINGS(tests) {
 
     trivial_class_<TrivialVector>("TrivialVector")
         .constructor()
-        .property("x", &Vector::x)
-        .property("y", &Vector::getY, &Vector::setY)
-        .property("y_readonly", &Vector::getY)
+        .property("x", &TrivialVector::x)
+        .property("y", &TrivialVector::getY, &TrivialVector::setY)
+        .property("y_readonly", &TrivialVector::getY)
         .property("z", &readTrivialVectorZ, &writeTrivialVectorZ)
-        .property("w", index<3>())
-        .function("getY", &Vector::getY)
-        .function("setY", &Vector::setY);
+        .function("getW", &TrivialVector::getW)
+        .function("setW", &TrivialVector::setW);
 
     function("emval_test_return_TrivialVector", &emval_test_return_TrivialVector);
     function("emval_test_take_and_return_TrivialVector", &emval_test_take_and_return_TrivialVector);
@@ -2527,7 +2534,7 @@ EMSCRIPTEN_BINDINGS(read_only_properties) {
         .property("i", &HasReadOnlyProperty::i)
         ;
 
-    trivial_class<HasReadOnlyProperty>("TrivialHasReadOnlyProperty")
+    trivial_class_<HasReadOnlyProperty>("TrivialHasReadOnlyProperty")
         .constructor<int>()
         .property("i", &HasReadOnlyProperty::i)
         ;

@@ -132,6 +132,15 @@ namespace emscripten {
                 GenericFunction invoker,
                 GenericFunction constructor);
 
+            void _embind_register_trivial_class_function(
+                TYPEID classType,
+                const char* methodName,
+                unsigned argCount,
+                const TYPEID argTypes[],
+                const char* invokerSignature,
+                GenericFunction invoker,
+                void* context);
+
             void _embind_register_trivial_class_property(
                 TYPEID classType,
                 const char* propertyName,
@@ -1446,7 +1455,7 @@ namespace emscripten {
         }
     };
 
-    template<typename ClassType <
+    template<typename ClassType>
     class trivial_class_ {
     public:
         typedef ClassType class_type;
@@ -1487,15 +1496,84 @@ namespace emscripten {
             return *this;
         }
 
-        template<typename InstanceType, typename FieldType>
-        value_object& property(const char* fieldName, FieldType InstanceType::*field) {
+        template<typename ReturnType, typename... Args, typename... Policies>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& function(const char* methodName, ReturnType (ClassType::*memberFunction)(Args...), Policies...) const {
             using namespace internal;
 
-            auto getter = &MemberAccess<InstanceType, FieldType>
-                ::template getWire<ClassType>;
-            auto setter = &MemberAccess<InstanceType, FieldType>
-                ::template setWire<ClassType>;
+            auto invoker = &MethodInvoker<decltype(memberFunction), ReturnType, ClassType*, Args...>::invoke;
 
+            typename WithPolicies<Policies...>::template ArgTypeList<ReturnType, AllowedRawPointer<ClassType>, Args...> args;
+            _embind_register_trivial_class_function(
+                TypeID<ClassType>::get(),
+                methodName,
+                args.getCount(),
+                args.getTypes(),
+                getSignature(invoker),
+                reinterpret_cast<GenericFunction>(invoker),
+                getContext(memberFunction));
+            return *this;
+        }
+
+        template<typename ReturnType, typename... Args, typename... Policies>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& function(const char* methodName, ReturnType (ClassType::*memberFunction)(Args...) const, Policies...) const {
+            using namespace internal;
+
+            auto invoker = &MethodInvoker<decltype(memberFunction), ReturnType, const ClassType*, Args...>::invoke;
+
+            typename WithPolicies<Policies...>::template ArgTypeList<ReturnType, AllowedRawPointer<const ClassType>, Args...> args;
+            _embind_register_trivial_class_function(
+                TypeID<ClassType>::get(),
+                methodName,
+                args.getCount(),
+                args.getTypes(),
+                getSignature(invoker),
+                reinterpret_cast<GenericFunction>(invoker),
+                getContext(memberFunction));
+            return *this;
+        }
+
+        template<typename ReturnType, typename ThisType, typename... Args, typename... Policies>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& function(const char* methodName, ReturnType (*function)(ThisType, Args...), Policies...) const {
+            using namespace internal;
+
+            typename WithPolicies<Policies...>::template ArgTypeList<ReturnType, ThisType, Args...> args;
+            auto invoke = &FunctionInvoker<decltype(function), ReturnType, ThisType, Args...>::invoke;
+            _embind_register_trivial_class_function(
+                TypeID<ClassType>::get(),
+                methodName,
+                args.getCount(),
+                args.getTypes(),
+                getSignature(invoke),
+                reinterpret_cast<GenericFunction>(invoke),
+                getContext(function));
+            return *this;
+        }
+
+        template<typename FieldType, typename = typename std::enable_if<!std::is_function<FieldType>::value>::type>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& property(const char* fieldName, const FieldType ClassType::*field) const {
+            using namespace internal;
+
+            auto getter = &MemberAccess<ClassType, FieldType>::template getWire<ClassType>;
+            _embind_register_trivial_class_property(
+                TypeID<ClassType>::get(),
+                fieldName,
+                TypeID<FieldType>::get(),
+                getSignature(getter),
+                reinterpret_cast<GenericFunction>(getter),
+                getContext(field),
+                0,
+                0,
+                0,
+                0);
+            return *this;
+        }
+
+        template<typename FieldType, typename = typename std::enable_if<!std::is_function<FieldType>::value>::type>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& property(const char* fieldName, FieldType ClassType::*field) const {
+            using namespace internal;
+
+            auto getter = &MemberAccess<ClassType, FieldType>::template getWire<ClassType>;
+            auto setter = &MemberAccess<ClassType, FieldType>::template setWire<ClassType>;
             _embind_register_trivial_class_property(
                 TypeID<ClassType>::get(),
                 fieldName,
@@ -1507,6 +1585,48 @@ namespace emscripten {
                 getSignature(setter),
                 reinterpret_cast<GenericFunction>(setter),
                 getContext(field));
+            return *this;
+        }
+
+        template<typename Getter>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& property(const char* fieldName, Getter getter) const {
+            using namespace internal;
+            typedef GetterPolicy<Getter> GP;
+            auto gter = &GP::template get<ClassType>;
+            _embind_register_trivial_class_property(
+                TypeID<ClassType>::get(),
+                fieldName,
+                TypeID<typename GP::ReturnType>::get(),
+                getSignature(gter),
+                reinterpret_cast<GenericFunction>(gter),
+                GP::getContext(getter),
+                0,
+                0,
+                0,
+                0);
+            return *this;
+        }
+
+        template<typename Getter, typename Setter>
+        EMSCRIPTEN_ALWAYS_INLINE const trivial_class_& property(const char* fieldName, Getter getter, Setter setter) const {
+            using namespace internal;
+            typedef GetterPolicy<Getter> GP;
+            typedef SetterPolicy<Setter> SP;
+
+            auto gter = &GP::template get<ClassType>;
+            auto ster = &SP::template set<ClassType>;
+
+            _embind_register_trivial_class_property(
+                TypeID<ClassType>::get(),
+                fieldName,
+                TypeID<typename GP::ReturnType>::get(),
+                getSignature(gter),
+                reinterpret_cast<GenericFunction>(gter),
+                GP::getContext(getter),
+                TypeID<typename SP::ArgumentType>::get(),
+                getSignature(ster),
+                reinterpret_cast<GenericFunction>(ster),
+                SP::getContext(setter));
             return *this;
         }
     };

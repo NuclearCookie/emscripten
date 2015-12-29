@@ -1694,7 +1694,7 @@ var LibraryEmbind = {
   ) {
     trivialClassRegistrations[rawType] = {
         name: readLatin1String(name),
-        properties: [];
+        properties: []
     };
   },
 
@@ -1743,6 +1743,62 @@ var LibraryEmbind = {
 
                 return argTypes[0]['fromWireType'](ptr);
             };
+            return [];
+        });
+        return [];
+    });
+  },
+
+  _embind_register_class_function__deps: [
+    '$craftInvokerFunction', '$heap32VectorToArray', '$readLatin1String',
+    '$requireFunction', '$throwUnboundTypeError',
+    '$whenDependentTypesAreResolved'],
+  _embind_register_trivial_class_function: function(
+    rawClassType,
+    methodName,
+    argCount,
+    rawArgTypesAddr, // [ReturnType, ThisType, Args...]
+    invokerSignature,
+    rawInvoker,
+    context
+  ) {
+    var rawArgTypes = heap32VectorToArray(argCount, rawArgTypesAddr);
+    methodName = readLatin1String(methodName);
+    rawInvoker = requireFunction(invokerSignature, rawInvoker);
+
+    whenDependentTypesAreResolved([], [rawClassType], function(classType) {
+        classType = classType[0];
+        var humanName = classType.name + '.' + methodName;
+
+        function unboundTypesHandler() {
+            throwUnboundTypeError('Cannot call ' + humanName + ' due to unbound types', rawArgTypes);
+        }
+
+        var proto = classType.registeredClass.instancePrototype;
+        var method = proto[methodName];
+        if (undefined === method || (undefined === method.overloadTable && method.className !== classType.name && method.argCount === argCount - 2)) {
+            // This is the first overload to be registered, OR we are replacing a function in the base class with a function in the derived class.
+            unboundTypesHandler.argCount = argCount - 2;
+            unboundTypesHandler.className = classType.name;
+            proto[methodName] = unboundTypesHandler;
+        } else {
+            // There was an existing function with the same name registered. Set up a function overload routing table.
+            ensureOverloadTable(proto, methodName, humanName);
+            proto[methodName].overloadTable[argCount - 2] = unboundTypesHandler;
+        }
+
+        whenDependentTypesAreResolved([], rawArgTypes, function(argTypes) {
+
+            var memberFunction = craftInvokerFunction(humanName, argTypes, classType, rawInvoker, context);
+
+            // Replace the initial unbound-handler-stub function with the appropriate member function, now that all types
+            // are resolved. If multiple overloads are registered for this function, the function goes into an overload table.
+            if (undefined === proto[methodName].overloadTable) {
+                proto[methodName] = memberFunction;
+            } else {
+                proto[methodName].overloadTable[argCount - 2] = memberFunction;
+            }
+
             return [];
         });
         return [];

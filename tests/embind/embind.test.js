@@ -1074,9 +1074,9 @@ module({
 
         test("trivial class methods", function() {
             var c = new cm.TrivialVector( 0, 1, 2, 3 );
-            assert.equal(1, c.getY());
-            c.setY( 10 );
-            assert.equal(10, c.getY());
+            assert.equal(3, c.getW());
+            c.setW( 10 );
+            assert.equal(10, c.getW());
         });
     });
 
