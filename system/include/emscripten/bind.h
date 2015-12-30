@@ -122,7 +122,8 @@ namespace emscripten {
 
             void _embind_register_trivial_class(
                 TYPEID classType,
-                const char* name);
+                const char* name,
+                size_t byteSize);
 
             void _embind_register_trivial_class_constructor(
                 TYPEID classType,
@@ -1469,7 +1470,8 @@ namespace emscripten {
 
             _embind_register_trivial_class(
                 TypeID<ClassType>::get(),
-                name);
+                name,
+                sizeof(ClassType));
         }
 
         template<typename... ConstructorArgs, typename... Policies>

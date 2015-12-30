@@ -11,7 +11,7 @@
 
 // -- jshint doesn't understand library syntax, so we need to specifically tell it about the symbols we define
 /*global typeDependencies, flushPendingDeletes, getTypeName, getBasestPointer, throwBindingError, UnboundTypeError, _embind_repr, registeredInstances, registeredTypes, getShiftFromSize*/
-/*global ensureOverloadTable, requireFunction, awaitingDependencies, makeLegalFunctionName, embind_charCodes:true, registerType, createNamedFunction, RegisteredPointer, throwInternalError*/
+/*global ensureOverloadTable, requireFunction, requireTrivialFunction, awaitingDependencies, makeLegalFunctionName, embind_charCodes:true, registerType, createNamedFunction, RegisteredPointer, throwInternalError*/
 /*global simpleReadValueFromPointer, floatReadValueFromPointer, integerReadValueFromPointer, enumReadValueFromPointer, replacePublicSymbol, craftInvokerFunction, tupleRegistrations*/
 /*global ClassHandle, makeClassHandle, structRegistrations, whenDependentTypesAreResolved, BindingError, deletionQueue, delayFunction:true, upcastPointer*/
 /*global exposePublicSymbol, heap32VectorToArray, new_, RegisteredPointer_getPointee, RegisteredPointer_destructor, RegisteredPointer_deleteObject, char_0, char_9*/
@@ -963,6 +963,59 @@ var LibraryEmbind = {
     return fp;
   },
 
+  $requireTrivialFunction__deps: ['$readLatin1String', '$throwBindingError'],
+  $requireTrivialFunction: function(signature, rawFunction, byteArray) {
+    signature = readLatin1String(signature);
+
+    function makeDynCaller(dynCall) {
+        var args = [];
+        for (var i = 1; i < signature.length; ++i) {
+            args.push('a' + i);
+        }
+
+        var name = 'dynCall_' + signature + '_' + rawFunction;
+        var body = 'return function ' + name + '(' + args.join(', ') + ') {\n';
+        body    += '    return dynCall(rawFunction' + (args.length ? ', ' : '') + args.join(', ') + ');\n';
+        body    += '};\n';
+
+        return (new Function('dynCall', 'rawFunction', 'byteArray', body))(dynCall, rawFunction, byteArray);
+    }
+
+    var fp;
+    if (Module['FUNCTION_TABLE_' + signature] !== undefined) {
+        fp = Module['FUNCTION_TABLE_' + signature][rawFunction];
+    } else if (typeof FUNCTION_TABLE !== "undefined") {
+        fp = FUNCTION_TABLE[rawFunction];
+    } else {
+        // asm.js does not give direct access to the function tables,
+        // and thus we must go through the dynCall interface which allows
+        // calling into a signature's function table by pointer value.
+        //
+        // https://github.com/dherman/asm.js/issues/83
+        //
+        // This has three main penalties:
+        // - dynCall is another function call in the path from JavaScript to C++.
+        // - JITs may not predict through the function table indirection at runtime.
+        var dc = asm['dynCall_' + signature];
+        if (dc === undefined) {
+            // We will always enter this branch if the signature
+            // contains 'f' and PRECISE_F32 is not enabled.
+            //
+            // Try again, replacing 'f' with 'd'.
+            dc = asm['dynCall_' + signature.replace(/f/g, 'd')];
+            if (dc === undefined) {
+                throwBindingError("No dynCall invoker for signature: " + signature);
+            }
+        }
+        fp = makeDynCaller(dc);
+    }
+
+    if (typeof fp !== "function") {
+        throwBindingError("unknown function pointer with signature " + signature + ": " + rawFunction);
+    }
+    return fp;
+  },
+
   _embind_register_function__deps: [
     '$craftInvokerFunction', '$exposePublicSymbol', '$heap32VectorToArray',
     '$readLatin1String', '$replacePublicSymbol', '$requireFunction',
@@ -1690,16 +1743,18 @@ var LibraryEmbind = {
     '$trivialClassRegistrations', '$readLatin1String'],
   _embind_register_trivial_class: function(
     rawType,
-    name
+    name,
+    byteSize
   ) {
     trivialClassRegistrations[rawType] = {
+        byteArray: new Uint32Array(byteSize),
         name: readLatin1String(name),
         properties: []
     };
   },
 
   _embind_register_trivial_class_constructor__deps: [
-    '$heap32VectorToArray', '$requireFunction', '$runDestructors',
+    '$heap32VectorToArray', '$requireTrivialFunction', '$runDestructors',
     '$throwBindingError', '$whenDependentTypesAreResolved'],
   _embind_register_trivial_class_constructor: function(
     rawClassType,
@@ -1709,8 +1764,10 @@ var LibraryEmbind = {
     invoker,
     rawConstructor
   ) {
+      // copy byteArray to c, execute constructor, copy back the array
+      // try to get rid of the registeredclass struct.
     var rawArgTypes = heap32VectorToArray(argCount, rawArgTypesAddr);
-    invoker = requireFunction(invokerSignature, invoker);
+    invoker = requireTrivialFunction(invokerSignature, invoker, trivialClassRegistrations[rawClassType].byteArray);
 
     whenDependentTypesAreResolved([], [rawClassType], function(classType) {
         classType = classType[0];
@@ -1749,7 +1806,7 @@ var LibraryEmbind = {
     });
   },
 
-  _embind_register_class_function__deps: [
+  _embind_register_trivial_class_function__deps: [
     '$craftInvokerFunction', '$heap32VectorToArray', '$readLatin1String',
     '$requireFunction', '$throwUnboundTypeError',
     '$whenDependentTypesAreResolved'],
